@@ -1,0 +1,47 @@
+# <type>(<scope>): <subject>
+#
+# <body>
+#
+# <footer>
+
+# Type must be one of the following:
+#   feat:     A new feature
+#   fix:      A bug fix
+#   docs:     Documentation only changes
+#   style:    Changes that do not affect the meaning of the code
+#   refactor: A code change that neither fixes a bug nor adds a feature
+#   perf:     A code change that improves performance
+#   test:     Adding missing tests or correcting existing tests
+#   chore:    Changes to the build process or auxiliary tools
+#   ci:       Changes to CI configuration files and scripts
+
+# Scope is optional and can be anything specifying the place of the commit change.
+# Examples: api, core, html, server, etc.
+
+# Subject should be:
+#   - Use imperative, present tense: "change" not "changed" nor "changes"
+#   - Don't capitalize first letter
+#   - No dot (.) at the end
+#   - Maximum 72 characters
+
+# Body should include:
+#   - Motivation for the change and contrast with previous behavior
+#   - What changed and why
+#   - Any breaking changes
+
+# Footer should contain:
+#   - Breaking changes (start with BREAKING CHANGE:)
+#   - Issue references (Closes #123, Fixes #456)
+
+# Examples:
+#   feat(server): add standalone request handler factory
+#
+#   Implement createHandler() that returns a Web Fetch API-compatible
+#   request handler, enabling usage with Bun, Deno, Hono, and
+#   Cloudflare Workers without framework adapters.
+#
+#   - Add createHandler() for Web Request/Response
+#   - Add createNodeHandler() for Node.js http module
+#   - Add buildUIRoutes() for low-level route definitions
+#
+#   Closes #1
