@@ -60,8 +60,8 @@ const handle = createNodeHandler(tools, handleCall, {
 });
 
 const server = http.createServer(handle);
-server.listen(3000, () => {
-  console.log("Running MCP Embedded UI at http://localhost:3000/explorer");
+server.listen(8000, () => {
+  console.log("Running MCP Embedded UI at http://localhost:8000/explorer");
   console.log(`Auth token for demo: Bearer ${DEMO_TOKEN}`);
   console.log("Paste the token above into the UI's token field to execute tools");
 });

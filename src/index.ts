@@ -1,10 +1,14 @@
 export type {
   AuthHook,
   CallResult,
+  Content,
+  ImageContent,
   IncomingRequest,
   TextContent,
   Tool,
   ToolCallHandler,
+  ToolCallHandler2,
+  ToolCallHandler3,
   ToolsProvider,
   UIConfig,
 } from "./types.js";

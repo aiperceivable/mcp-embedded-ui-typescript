@@ -1,6 +1,6 @@
 {
   "name": "mcp-embedded-ui",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "A lightweight, minimal-dependency embedded Web UI for any MCP Server.",
   "type": "module",
   "main": "./dist/index.js",
@@ -12,13 +12,13 @@
     }
   },
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && node -e \"require('fs').cpSync('src/explorer.html','dist/explorer.html')\"",
     "dev": "tsc --watch",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "typecheck": "tsc --noEmit",
-    "clean": "rm -rf dist",
+    "clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\"",
     "prepublishOnly": "npm run build"
   },
   "keywords": [
@@ -44,6 +44,7 @@
   },
   "files": [
     "dist",
+    "src/explorer.html",
     "README.md",
     "LICENSE"
   ],

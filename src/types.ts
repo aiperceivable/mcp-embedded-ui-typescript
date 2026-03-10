@@ -12,9 +12,19 @@ export interface TextContent {
   text: string;
 }
 
+/** MCP image content item. */
+export interface ImageContent {
+  type: "image";
+  mimeType: string;
+  data: string;
+}
+
+/** Any MCP content item. */
+export type Content = TextContent | ImageContent;
+
 /** Result returned from a tool call endpoint. */
 export interface CallResult {
-  content: TextContent[];
+  content: Content[];
   isError: boolean;
   _meta?: { _trace_id: string };
 }
@@ -32,10 +42,18 @@ export type ToolsProvider =
  * Executes a tool by name with the given arguments.
  * Returns [content, isError, traceId?].
  */
-export type ToolCallHandler = (
+export type ToolCallHandler2 = (
   name: string,
   args: Record<string, unknown>,
-) => Promise<[TextContent[], boolean, string?]>;
+) => Promise<[Content[], boolean, string?]>;
+
+export type ToolCallHandler3 = (
+  name: string,
+  args: Record<string, unknown>,
+  request: IncomingRequest,
+) => Promise<[Content[], boolean, string?]>;
+
+export type ToolCallHandler = ToolCallHandler2 | ToolCallHandler3;
 
 /**
  * Auth middleware — receives the incoming request, calls `next()` to proceed.
@@ -51,6 +69,8 @@ export interface UIConfig {
   allowExecute?: boolean;
   authHook?: AuthHook;
   title?: string;
+  projectName?: string;
+  projectUrl?: string;
 }
 
 /**

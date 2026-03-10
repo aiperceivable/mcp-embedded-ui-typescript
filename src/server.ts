@@ -8,6 +8,7 @@
 import { renderExplorerHtml } from "./html.js";
 import type {
   CallResult,
+  Content,
   IncomingRequest,
   TextContent,
   Tool,
@@ -78,9 +79,17 @@ async function doCall(
   name: string,
   body: Record<string, unknown>,
   handler: ToolCallHandler,
+  request: IncomingRequest,
 ): Promise<Response> {
   try {
-    const [content, isError, traceId] = await handler(name, body);
+    let content: Content[];
+    let isError: boolean;
+    let traceId: string | undefined;
+    if (handler.length >= 3) {
+      [content, isError, traceId] = await (handler as import("./types.js").ToolCallHandler3)(name, body, request);
+    } else {
+      [content, isError, traceId] = await (handler as import("./types.js").ToolCallHandler2)(name, body);
+    }
     const result: CallResult = { content, isError };
     if (traceId) {
       result._meta = { _trace_id: traceId };
@@ -106,7 +115,7 @@ async function doCall(
 /** A single route definition returned by `buildUIRoutes`. */
 export interface Route {
   method: "GET" | "POST";
-  /** Pattern like `/`, `/meta`, `/tools`, `/tools/:name`, `/tools/:name/call`. */
+  /** Pattern like `/`, `/tools`, `/tools/:name`, `/tools/:name/call`. */
   pattern: string;
   handler: (req: IncomingRequest, params: Record<string, string>) => Promise<Response>;
 }
@@ -131,21 +140,16 @@ export function buildUIRoutes(
     allowExecute = true,
     authHook,
     title = "MCP Tool Explorer",
+    projectName,
+    projectUrl,
   } = config;
 
-  const htmlPage = renderExplorerHtml(title);
+  const htmlPage = renderExplorerHtml(title, allowExecute, projectName, projectUrl);
 
   const explorerPage: Route = {
     method: "GET",
     pattern: "/",
     handler: async () => htmlResponse(htmlPage),
-  };
-
-  const meta: Route = {
-    method: "GET",
-    pattern: "/meta",
-    handler: async () =>
-      jsonResponse({ title, allow_execute: allowExecute }),
   };
 
   const listTools: Route = {
@@ -198,18 +202,18 @@ export function buildUIRoutes(
 
       if (authHook) {
         try {
-          return await authHook(req, () => doCall(params.name, body, handleCall));
+          return await authHook(req, () => doCall(params.name, body, handleCall, req));
         } catch (err: unknown) {
           console.warn("[mcp-embedded-ui] Auth hook failed for tool %s: %s", params.name, err);
           return jsonResponse({ error: "Unauthorized" }, 401);
         }
       }
 
-      return doCall(params.name, body, handleCall);
+      return doCall(params.name, body, handleCall, req);
     },
   };
 
-  return [explorerPage, meta, listTools, callTool, toolDetailRoute];
+  return [explorerPage, listTools, callTool, toolDetailRoute];
 }
 
 // ---------------------------------------------------------------------------
@@ -281,7 +285,7 @@ export function createHandler(
  * ```ts
  * import http from "node:http";
  * const handle = createNodeHandler(tools, handleCall);
- * http.createServer(handle).listen(3000);
+ * http.createServer(handle).listen(8000);
  * ```
  */
 export function createNodeHandler(

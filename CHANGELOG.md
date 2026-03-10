@@ -2,26 +2,34 @@
 
 All notable changes to this project will be documented in this file.
 
-Format follows [Keep a Changelog](https://keepachangelog.com/).
+## [0.2.0] - 2026-03-10
 
-## [0.1.0] - 2026-03-09
+### Removed
+
+- **`/meta` endpoint** — configuration is now baked into the HTML via `{{ALLOW_EXECUTE}}` template variable.
 
 ### Added
 
-- Core route builder (`buildUIRoutes`) with 5 endpoints:
-  - `GET /` — self-contained HTML explorer page
-  - `GET /meta` — JSON config (`allow_execute`, `title`)
-  - `GET /tools` — tool summary list
-  - `GET /tools/{name}` — tool detail with input schema
-  - `POST /tools/{name}/call` — tool execution
-- `createHandler()` — Web Fetch API-compatible handler (Bun, Deno, Hono, Cloudflare Workers)
-- `createNodeHandler()` — Node.js `http.createServer` compatible handler
-- Dynamic tools support — static array, sync function, or async function
-- Auth hook — middleware pattern `(req, next) => Promise<Response>`
-- Configurable title with XSS-safe HTML escaping
-- `annotations` field omitted (not `null`) when absent
-- `_meta` with `_trace_id` omitted when trace ID is empty
-- `allowExecute=false` blocks at handler level, not just UI
-- Auth error responses return only `{"error": "Unauthorized"}` — no detail leaking
-- Zero runtime dependencies
-- 30+ tests covering all endpoints, auth, dynamic tools, security, and exports
+- **ToolCallHandler 3-param support** — `handleCall(name, args, request)` is auto-detected via `handler.length`. Existing 2-param handlers continue to work unchanged.
+- **`allowExecute`** config option — defaults to `true`; set to `false` to disable tool execution server-side.
+- **`projectName` / `projectUrl`** config options — optional footer link for downstream projects (e.g., `projectName: "apcore-mcp"`).
+- **`ImageContent` / `Content` types** — `CallResult.content` now accepts `TextContent | ImageContent` instead of `TextContent` only.
+- **`ToolCallHandler2` / `ToolCallHandler3` union types** — exported for consumers who need specific handler signatures.
+- **Package resource HTML** — `explorer.html` is now shipped as a resource file read via `readFileSync`, replacing the embedded template literal constant.
+- **Tool search/filter, multi-content-type rendering, execution time display, cURL escaping fix** — all from updated shared HTML template.
+
+### Changed
+
+- `html.ts` rewritten from ~430 lines to ~46 lines (reads HTML from resource file, builds project link).
+- Build script copies `explorer.html` to `dist/` (cross-platform via Node.js `fs.cpSync`).
+- `package.json` includes `src/explorer.html` in published files.
+- Default port in examples and README changed from 3000 to 8000.
+- README updated: removed `/meta` from endpoints table, added `projectName`/`projectUrl` to config parameters.
+
+## [0.1.0] - 2025-12-01
+
+### Added
+
+- Initial implementation with framework-agnostic route builder, Node.js handler, and Web API handler.
+- Tool discovery, execution, and auth hook support.
+- Express and Hono compatibility.

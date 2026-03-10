@@ -107,35 +107,28 @@ describe("Explorer page", () => {
     expect(text).toContain("My Custom Explorer");
     expect(text).not.toContain("MCP Tool Explorer");
   });
-});
 
-// ---------------------------------------------------------------------------
-// Meta endpoint
-// ---------------------------------------------------------------------------
-
-describe("Meta endpoint", () => {
-  it("returns config", async () => {
-    const resp = await request("GET", "/meta");
-    expect(resp.status).toBe(200);
-    const data = await resp.json();
-    expect(data.allow_execute).toBe(true);
-    expect(data.title).toBe("MCP Tool Explorer");
+  it("contains allow_execute=true when enabled", async () => {
+    const resp = await request("GET", "/", {
+      config: { allowExecute: true },
+    });
+    const text = await resp.text();
+    expect(text).toContain("var executeEnabled = true;");
+    expect(text).not.toContain("{{ALLOW_EXECUTE}}");
   });
 
-  it("reflects allowExecute=false", async () => {
-    const resp = await request("GET", "/meta", {
+  it("contains allow_execute=false when disabled", async () => {
+    const resp = await request("GET", "/", {
       config: { allowExecute: false },
     });
-    const data = await resp.json();
-    expect(data.allow_execute).toBe(false);
+    const text = await resp.text();
+    expect(text).toContain("var executeEnabled = false;");
   });
 
-  it("reflects custom title", async () => {
-    const resp = await request("GET", "/meta", {
-      config: { title: "Custom" },
-    });
-    const data = await resp.json();
-    expect(data.title).toBe("Custom");
+  it("defaults allow_execute to true via config", async () => {
+    const resp = await request("GET", "/");
+    const text = await resp.text();
+    expect(text).toContain("var executeEnabled = true;");
   });
 });
 
@@ -315,7 +308,6 @@ describe("Auth hook", () => {
 
     const config = { authHook };
     expect((await request("GET", "/", { config })).status).toBe(200);
-    expect((await request("GET", "/meta", { config })).status).toBe(200);
     expect((await request("GET", "/tools", { config })).status).toBe(200);
     expect((await request("GET", "/tools/echo", { config })).status).toBe(200);
     expect(callCount).toBe(0);
@@ -442,10 +434,11 @@ describe("Title XSS prevention", () => {
 // ---------------------------------------------------------------------------
 
 describe("Title placeholder absent", () => {
-  it("does not contain raw {{TITLE}} placeholder", async () => {
+  it("does not contain raw {{TITLE}} or {{ALLOW_EXECUTE}} placeholder", async () => {
     const resp = await request("GET", "/");
     const text = await resp.text();
     expect(text).not.toContain("{{TITLE}}");
+    expect(text).not.toContain("{{ALLOW_EXECUTE}}");
   });
 
   it("replaces placeholder with custom title", async () => {
@@ -468,17 +461,58 @@ describe("Title placeholder absent", () => {
 });
 
 // ---------------------------------------------------------------------------
+// Project link in footer
+// ---------------------------------------------------------------------------
+
+describe("Project link", () => {
+  it("no project link by default", async () => {
+    const resp = await request("GET", "/");
+    const text = await resp.text();
+    expect(text).not.toContain("{{PROJECT_LINK}}");
+    expect(text).not.toContain("&middot;");
+  });
+
+  it("renders project name only (no link)", async () => {
+    const resp = await request("GET", "/", {
+      config: { projectName: "my-project" },
+    });
+    const text = await resp.text();
+    expect(text).toContain("&middot; my-project");
+  });
+
+  it("renders project name with URL as link", async () => {
+    const resp = await request("GET", "/", {
+      config: {
+        projectName: "my-project",
+        projectUrl: "https://github.com/example/my-project",
+      },
+    });
+    const text = await resp.text();
+    expect(text).toContain("my-project");
+    expect(text).toContain("https://github.com/example/my-project");
+  });
+
+  it("escapes project name to prevent XSS", async () => {
+    const resp = await request("GET", "/", {
+      config: { projectName: "<script>alert(1)</script>" },
+    });
+    const text = await resp.text();
+    expect(text).not.toContain("<script>alert(1)</script>");
+    expect(text).toContain("&lt;script&gt;alert(1)&lt;/script&gt;");
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Backward compatibility
 // ---------------------------------------------------------------------------
 
 describe("Backward compatibility", () => {
   it("buildMcpUIRoutes still works", async () => {
     const routes = buildMcpUIRoutes(TOOLS, fakeHandler);
-    expect(routes).toHaveLength(5);
-    // Verify it produces working routes by checking the meta endpoint
-    const metaRoute = routes.find((r) => r.pattern === "/meta");
-    expect(metaRoute).toBeDefined();
-    const resp = await metaRoute!.handler(
+    expect(routes).toHaveLength(4);
+    const toolsRoute = routes.find((r) => r.pattern === "/tools");
+    expect(toolsRoute).toBeDefined();
+    const resp = await toolsRoute!.handler(
       { headers: {} },
       {},
     );
@@ -530,6 +564,12 @@ describe("HTML template drift", () => {
     const fs = await import("node:fs");
     const path = await import("node:path");
 
+    const pkgPath = path.resolve(
+      import.meta.dirname ?? ".",
+      "..",
+      "src",
+      "explorer.html",
+    );
     const specPath = path.resolve(
       import.meta.dirname ?? ".",
       "..",
@@ -544,8 +584,9 @@ describe("HTML template drift", () => {
       return;
     }
 
+    const pkgHtml = fs.readFileSync(pkgPath, "utf-8");
     const specHtml = fs.readFileSync(specPath, "utf-8");
-    expect(EXPLORER_HTML_TEMPLATE).toBe(specHtml);
+    expect(pkgHtml).toBe(specHtml);
   });
 });
 

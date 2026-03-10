@@ -62,8 +62,8 @@ const handle = createNodeHandler(tools, handleCall, {
   title: "My Explorer",
 });
 
-http.createServer(handle).listen(3000);
-// Visit http://localhost:3000/explorer
+http.createServer(handle).listen(8000);
+// Visit http://localhost:8000/explorer
 ```
 
 ### Full working example
@@ -99,7 +99,7 @@ const handleCall: ToolCallHandler = async (name, args) => {
 
 // 3. Create and start the server
 const handle = createNodeHandler(tools, handleCall, { prefix: "/explorer" });
-http.createServer(handle).listen(3000);
+http.createServer(handle).listen(8000);
 ```
 
 ### With auth hook
@@ -162,6 +162,8 @@ const handler = createHandler(getTools, handleCall);
 | `allowExecute` | `boolean` | `true` | Enable/disable tool execution (enforced server-side) |
 | `authHook` | `AuthHook` | — | Middleware: `(req, next) => Promise<Response>` |
 | `title` | `string` | `"MCP Tool Explorer"` | Page title (HTML-escaped automatically) |
+| `projectName` | `string` | — | Project name shown in footer |
+| `projectUrl` | `string` | — | Project URL linked in footer (requires `projectName`) |
 
 ### Auth Hook
 
@@ -177,14 +179,13 @@ const authHook: AuthHook = async (req, next) => {
 };
 ```
 
-Auth only guards `POST /tools/{name}/call`. Discovery endpoints (`GET /tools`, `GET /tools/{name}`, `GET /meta`) are always public.
+Auth only guards `POST /tools/{name}/call`. Discovery endpoints (`GET /tools`, `GET /tools/{name}`) are always public.
 
 ### Endpoints
 
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/` | Self-contained HTML explorer page |
-| GET | `/meta` | JSON config — `{ title, allow_execute }` |
 | GET | `/tools` | Summary list of all tools |
 | GET | `/tools/{name}` | Full tool detail with `inputSchema` |
 | POST | `/tools/{name}/call` | Execute a tool, returns MCP `CallToolResult` |
@@ -203,7 +204,7 @@ npx vitest run
 
 # Run the demo (auth enabled with a demo token)
 npx tsx examples/node-demo.ts
-# Visit http://localhost:3000/explorer
+# Visit http://localhost:8000/explorer
 # Paste "Bearer demo-secret-token" in the UI's token field to execute tools
 ```
 
