@@ -11,6 +11,8 @@ export type {
   ToolCallHandler3,
   ToolsProvider,
   UIConfig,
+  ValidateResult,
+  ValidationFailure,
 } from "./types.js";
 
 export {

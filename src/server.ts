@@ -18,29 +18,36 @@ import type {
   ToolCallHandler,
   ToolsProvider,
   UIConfig,
+  ValidationFailure,
 } from "./types.js";
 
 const ajv = new Ajv2020({ allErrors: true, strict: false });
 addFormats(ajv);
 
-interface ValidationError {
-  path: string;
-  message: string;
-  keyword?: string;
-}
-
 function validateArgs(
   schema: Record<string, unknown> | null | undefined,
   data: unknown,
-): ValidationError[] {
+): ValidationFailure[] {
   if (!schema || Object.keys(schema).length === 0) return [];
-  const validate = ajv.compile(schema);
-  if (validate(data)) return [];
-  return (validate.errors ?? []).map((e) => ({
-    path: e.instancePath || "",
-    message: e.message ?? "validation failed",
-    keyword: e.keyword,
-  }));
+  try {
+    const validate = ajv.compile(schema);
+    if (validate(data)) return [];
+    return (validate.errors ?? []).map((e) => ({
+      path: e.instancePath || "",
+      message: e.message ?? "validation failed",
+      keyword: e.keyword,
+    }));
+  } catch (err) {
+    // The schema itself is not compilable. Report it as a validation failure
+    // (F7) rather than letting it escape as a 500 — and never as valid.
+    return [
+      {
+        path: "",
+        message: `Invalid schema: ${err instanceof Error ? err.message : String(err)}`,
+        keyword: "schema",
+      },
+    ];
+  }
 }
 
 // ---------------------------------------------------------------------------

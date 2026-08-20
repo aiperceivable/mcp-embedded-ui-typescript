@@ -82,3 +82,25 @@ export interface IncomingRequest {
   url?: string;
   headers: Record<string, string | string[] | undefined>;
 }
+
+/**
+ * A single schema-validation failure, as returned by
+ * `POST /tools/:name/validate` (F7).
+ *
+ * `path` is a JSON Pointer (RFC 6901); the root is the empty string.
+ */
+export interface ValidationFailure {
+  path: string;
+  message: string;
+  keyword?: string;
+}
+
+/**
+ * Response body of `POST /tools/:name/validate` (F7).
+ *
+ * `errors` is omitted entirely when the input is valid — it is never `[]`.
+ */
+export interface ValidateResult {
+  valid: boolean;
+  errors?: ValidationFailure[];
+}

@@ -13,6 +13,8 @@ import type {
   Tool,
   ToolCallHandler,
   ToolsProvider,
+  ValidateResult,
+  ValidationFailure,
 } from "../src/index.js";
 
 // ---------------------------------------------------------------------------
@@ -236,7 +238,26 @@ describe("Validate tool", () => {
     required: ["city"],
   });
   const noSchemaTool = fakeTool("noschema", "No schema", {});
-  const VTOOLS: Tool[] = [schemaTool, noSchemaTool];
+  // A schema that is itself structurally invalid — Ajv cannot compile it (F7).
+  const badSchemaTool = fakeTool("badschema", "Broken schema", {
+    type: "no-such-type",
+  });
+  const VTOOLS: Tool[] = [schemaTool, noSchemaTool, badSchemaTool];
+
+  it("reports an uncompilable schema as a validation failure", async () => {
+    // Must not crash the endpoint (500) and must not be reported valid.
+    const resp = await request("POST", "/tools/badschema/validate", {
+      tools: VTOOLS,
+      body: { anything: 1 },
+    });
+    expect(resp.status).toBe(200);
+    const data = await resp.json();
+    expect(data.valid).toBe(false);
+    expect(data.errors).toHaveLength(1);
+    expect(data.errors[0].path).toBe("");
+    expect(data.errors[0].keyword).toBe("schema");
+    expect(data.errors[0].message).toMatch(/^Invalid schema:/);
+  });
 
   it("returns valid:true for matching input", async () => {
     const resp = await request("POST", "/tools/echo/validate", {
@@ -699,6 +720,63 @@ describe("Backward compatibility", () => {
 // Public exports
 // ---------------------------------------------------------------------------
 
+// F7 public type exports. Types are erased at runtime, so a `toHaveProperty`
+// check cannot see them — these declarations fail `tsc` instead if the types
+// stop being nameable from the package root.
+{
+  const _result: ValidateResult = { valid: true };
+  const _resultWithErrors: ValidateResult = {
+    valid: false,
+    errors: [{ path: "/city", message: "is required", keyword: "required" }],
+  };
+  const _failure: ValidationFailure = { path: "", message: "x" };
+  void _result;
+  void _resultWithErrors;
+  void _failure;
+}
+
+describe("project_url scheme allow-list", () => {
+  // HTML escaping alone does not neutralise `javascript:`. Browsers also
+  // ignore TAB/LF/CR and leading whitespace when resolving a scheme.
+  const ACCEPTED = [
+    "https://example.com/x",
+    "http://example.com/x",
+    "HTTPS://example.com/x",
+    "mailto:someone@example.com",
+    "/docs/index.html",
+  ];
+  const REJECTED = [
+    "javascript:alert(1)",
+    "JaVaScRiPt:alert(1)",
+    "data:text/html,<script>alert(1)</script>",
+    "vbscript:msgbox(1)",
+    "  javascript:alert(1)",
+    "java\tscript:alert(1)",
+    "java\nscript:alert(1)",
+    "java\rscript:alert(1)",
+  ];
+
+  function footerOf(projectUrl: string): string {
+    const html = renderExplorerHtml("t", false, "proj", projectUrl);
+    return html.split("mcp-embedded-ui</a>").pop() ?? "";
+  }
+
+  it("renders an anchor for accepted schemes", () => {
+    for (const url of ACCEPTED) {
+      expect(footerOf(url), `${url} should render an anchor`).toContain("<a href=");
+    }
+  });
+
+  it("degrades rejected schemes to plain text", () => {
+    for (const url of REJECTED) {
+      const footer = footerOf(url);
+      expect(footer, `${url} must not become an anchor`).not.toContain("<a href=");
+      expect(footer, `${url} must still show the name`).toContain("proj");
+      expect(footer.toLowerCase(), `${url} leaked into the page`).not.toContain("javascript");
+    }
+  });
+});
+
 describe("Public exports", () => {
   it("exports all expected names", async () => {
     const mod = await import("../src/index.js");
@@ -707,6 +785,8 @@ describe("Public exports", () => {
       "buildUIRoutes",
       "createHandler",
       "createNodeHandler",
+      // Deprecated (F5: implementation detail). Still asserted so their
+      // removal is a deliberate edit rather than an accident.
       "EXPLORER_HTML_TEMPLATE",
       "renderExplorerHtml",
     ];
@@ -748,6 +828,120 @@ describe("HTML template drift", () => {
     const pkgHtml = fs.readFileSync(pkgPath, "utf-8");
     const specHtml = fs.readFileSync(specPath, "utf-8");
     expect(pkgHtml).toBe(specHtml);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Prefill generation — F6/FR-1, criteria TC-1 / TC-17 / TC-18 / TC-19 / TC-20
+//
+// defaultFromSchema is JavaScript living inside explorer.html, which the
+// drift check above pins byte-for-byte against the spec repo — and every SDK
+// ships that same file. Executing it here therefore covers the shared
+// template, not just this package.
+// ---------------------------------------------------------------------------
+
+type PrefillSchema = Record<string, unknown> | undefined;
+type Prefill = (schema: PrefillSchema) => Record<string, unknown>;
+
+async function loadDefaultFromSchema(): Promise<Prefill> {
+  const fs = await import("node:fs");
+  const path = await import("node:path");
+  const html = fs.readFileSync(
+    path.resolve(import.meta.dirname ?? ".", "..", "src", "explorer.html"),
+    "utf-8",
+  );
+  const match = html.match(
+    /^ {2}function defaultFromSchema\(schema\) \{[\s\S]*?^ {2}\}$/m,
+  );
+  if (!match) throw new Error("defaultFromSchema not found in explorer.html");
+  return new Function(`${match[0]}\nreturn defaultFromSchema;`)() as Prefill;
+}
+
+describe("prefill generation (FR-1)", () => {
+  it("TC-1: uses a declared default, including falsy ones", async () => {
+    const gen = await loadDefaultFromSchema();
+    expect(gen({ properties: { a: { type: "string", default: "x" } }, required: ["a"] })).toEqual({ a: "x" });
+    expect(gen({ properties: { n: { type: "integer", default: 0 } }, required: ["n"] })).toEqual({ n: 0 });
+    expect(gen({ properties: { b: { type: "boolean", default: false } }, required: ["b"] })).toEqual({ b: false });
+    expect(gen({ properties: { s: { type: "string", default: "" } }, required: ["s"] })).toEqual({ s: "" });
+    expect(gen({ properties: { x: { type: ["string", "null"], default: null } }, required: ["x"] })).toEqual({ x: null });
+  });
+
+  it("TC-1: emits null for a required property with no default", async () => {
+    const gen = await loadDefaultFromSchema();
+    expect(gen({ properties: { city: { type: "string" } }, required: ["city"] })).toEqual({ city: null });
+  });
+
+  it("TC-1: never fabricates a type-based value", async () => {
+    const gen = await loadDefaultFromSchema();
+    expect(
+      gen({
+        properties: {
+          s: { type: "string" }, n: { type: "integer" }, b: { type: "boolean" },
+          a: { type: "array" }, o: { type: "object" },
+        },
+        required: ["s", "n", "b", "a", "o"],
+      }),
+    ).toEqual({ s: null, n: null, b: null, a: null, o: null });
+  });
+
+  it("TC-17: prefills {} when required is absent or empty", async () => {
+    const gen = await loadDefaultFromSchema();
+    expect(gen(undefined)).toEqual({});
+    expect(gen({ type: "object", properties: { a: { type: "string" } } })).toEqual({});
+    expect(gen({ properties: { a: { type: "string" } }, required: [] })).toEqual({});
+  });
+
+  it("TC-18: omits optional properties even when they declare a default", async () => {
+    const gen = await loadDefaultFromSchema();
+    expect(
+      gen({
+        properties: { a: { type: "string" }, b: { type: "string", default: "keep" } },
+        required: ["a"],
+      }),
+    ).toEqual({ a: null });
+  });
+
+  it("TC-18: prefill size follows required.length, not the property count", async () => {
+    const gen = await loadDefaultFromSchema();
+    const properties: Record<string, unknown> = { url: { type: "string" } };
+    for (let i = 0; i < 256; i++) properties[`opt${i}`] = { type: "string", default: "d" };
+    expect(gen({ properties, required: ["url"] })).toEqual({ url: null });
+  });
+
+  it("TC-19: emits null for a required name absent from properties", async () => {
+    const gen = await loadDefaultFromSchema();
+    expect(gen({ properties: {}, required: ["ghost"] })).toEqual({ ghost: null });
+  });
+
+  it("TC-19: does not recurse into nested object properties", async () => {
+    const gen = await loadDefaultFromSchema();
+    expect(
+      gen({
+        properties: { o: { type: "object", properties: { i: { type: "string" } }, required: ["i"] } },
+        required: ["o"],
+      }),
+    ).toEqual({ o: null });
+  });
+
+  it("TC-20: the untouched prefill is rejected by /validate", async () => {
+    const gen = await loadDefaultFromSchema();
+    const inputSchema = {
+      type: "object",
+      properties: { city: { type: "string" }, count: { type: "integer" } },
+      required: ["city"],
+    };
+    const prefill = gen(inputSchema);
+    expect(prefill).toEqual({ city: null });
+
+    const resp = await request("POST", "/tools/echo/validate", {
+      tools: [fakeTool("echo", "Echo back", inputSchema)],
+      body: prefill,
+    });
+    expect(resp.status).toBe(200);
+    const data = await resp.json();
+    expect(data.valid).toBe(false);
+    expect(data.errors.some((e: { path: string }) => e.path === "/city")).toBe(true);
   });
 });
 

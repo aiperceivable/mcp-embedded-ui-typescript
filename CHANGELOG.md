@@ -2,6 +2,68 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.0] - 2026-08-20
+
+### Changed
+
+- **BREAKING (spec F6/FR-1): the Try-It editor prefill no longer fabricates values.**
+  Synced `explorer.html` from the spec repo at 0.5.0. The prefill now emits exactly
+  the keys listed in `inputSchema.required`, using each property's declared
+  `default` when it has one and `null` otherwise. Optional properties are omitted
+  entirely, generation does not recurse into nested objects, and a schema with no
+  `required` prefills `{}`.
+
+  The previous rule invented a type-based value for *every* property
+  (`"string"` → `""`, `"number"` → `0`, …), which had two consequences. First,
+  size: a 257-property schema produced a 259-line prefill inside a 120px editor.
+  Second, and more seriously, it emitted a key for every property and drew every
+  value from the declared type, so it satisfied `required` and the type
+  constraints unconditionally — making the 0.4.0 Validate button incapable of
+  failing on a fresh prefill for any schema. `null` supplies the key without
+  asserting a value and is rejected wherever the schema does not admit it.
+
+### Fixed
+
+- **`project_url` is now scheme-checked before being placed in `href`.** Only
+  `http://`, `https://`, `mailto:` and a leading `/` are accepted; anything else
+  renders the project name as plain text. TAB/LF/CR are stripped and the value
+  trimmed before the check, because browsers ignore those while resolving a
+  scheme. Not an exploitable vulnerability — `project_url` is deployment
+  configuration, not caller input — but HTML escaping alone never stopped
+  `javascript:`.
+
+- **`/validate` no longer mishandles a tool whose `inputSchema` cannot be
+  compiled.** Such a schema is now reported as a single `keyword: "schema"`
+  validation failure at HTTP 200, per the new F7 contract.
+  Previously `ajv.compile` threw uncaught and the endpoint answered 500.
+- An explicit `default: null` in a schema is now honoured. The previous guard
+  (`props[key]['default'] != null`) discarded it and fell through to a fabricated
+  type default.
+
+### Added
+
+- **`ValidateResult` and `ValidationFailure` exported from the package root**
+  (F7). The private `ValidationError` interface moved to `types.ts` and was
+  renamed per the spec — the API returned a shape its own users could not name.
+
+### Deprecated
+
+- **`EXPLORER_HTML_TEMPLATE` and `renderExplorerHtml`** — implementation
+  details per F5, kept private by Python and Rust. Scheduled for removal in the
+  next minor release; customise the page via `title` / `projectName` /
+  `projectUrl`.
+
+### Tests
+
+- Added a `/validate` case for a tool whose `inputSchema` cannot be compiled by
+  Ajv — asserts 200 with a single `keyword: "schema"` failure, not a 500.
+
+- Added prefill generation tests covering spec criteria TC-1, TC-17, TC-18, TC-19
+  and TC-20. `defaultFromSchema` is extracted from `explorer.html` and executed
+  directly, so these exercise the shared template every SDK ships — not a
+  re-implementation. TC-20 runs the untouched prefill through `/validate` and
+  asserts it is rejected.
+
 ## [0.4.0] - 2026-04-28
 
 ### Added
