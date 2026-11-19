@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.1] - 2026-11-18
+
+### Changed
+
+- Refresh the development toolchain to `vitest` / `@vitest/coverage-v8` 5.1.0.
+  No runtime changes.
+
 ## [0.5.0] - 2026-08-20
 
 ### Changed
