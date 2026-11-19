@@ -194,6 +194,8 @@ Auth only guards `POST /tools/{name}/call`. Discovery endpoints (`GET /tools`, `
 
 ## Development
 
+Use Node.js 22.12 or later on a supported LTS release line.
+
 ```bash
 # Install dependencies
 npm install
